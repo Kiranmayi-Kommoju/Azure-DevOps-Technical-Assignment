@@ -1,4 +1,4 @@
-# Design Notes
+# Design Notes 
 
 > Candidate deliverable. Replace every prompt below with your own content.
 > Keep it concise — bullet points are fine. This file exists so a reviewer
@@ -42,3 +42,6 @@ to make implicit decisions explicit.
 
 Be honest here. Cut corners, things you'd harden for a real production
 rollout, anything you didn't get to.
+
+
+My First Change in VS Code.
