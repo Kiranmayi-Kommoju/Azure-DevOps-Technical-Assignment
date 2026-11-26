@@ -1,10 +1,24 @@
-# Azure DevOps pipeline definition.
-# TODO: define trigger, stages, and jobs for building/deploying the infra in ../infra.
+# Main CI/CD pipeline: Validate -> Dev -> Test -> Prod
+#
+# Runs on every push to main that touches infrastructure, pipelines or scripts.
+# Pull requests are handled by pr-validation.yml (no deployment).
+# All stage/job logic lives in ./templates - this file only sets the triggers.
+
+name: infra-$(Date:yyyyMMdd)$(Rev:.r)
 
 trigger:
-  - main
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - infra/*
+      - pipelines/*
+      - scripts/*
 
-pool:
-  vmImage: ubuntu-latest
+pr: none
 
-stages: []
+extends:
+  template: templates/pipeline.yml
+  parameters:
+    deploy: true

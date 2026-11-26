@@ -1,0 +1,24 @@
+# Pull Request validation: Bicep build, lint and what-if. Never deploys.
+#
+# GitHub repo: the pr trigger below is used.
+# Azure Repos: add this pipeline as a Build Validation branch policy on main
+# (YAML pr triggers are ignored for Azure Repos).
+
+name: pr-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - infra/*
+      - pipelines/*
+      - scripts/*
+
+extends:
+  template: templates/pipeline.yml
+  parameters:
+    deploy: false

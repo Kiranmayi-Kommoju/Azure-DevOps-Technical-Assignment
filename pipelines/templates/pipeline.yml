@@ -1,0 +1,47 @@
+# Shared pipeline definition used by azure-pipelines.yml and pr-validation.yml.
+#
+# Environment specific, NON-secret settings live in the environments list below.
+# Secrets (the external API key) live in one Azure DevOps variable group per
+# environment and are only linked to the deployment job of that environment.
+
+parameters:
+  - name: deploy
+    type: boolean
+    default: false
+
+  - name: environments
+    type: object
+    default:
+      - name: dev
+        displayName: Dev
+        serviceConnection: sc-hwapp      # one subscription -> one service connection
+        adoEnvironment: hwapp-dev        # Azure DevOps environment
+        variableGroup: vg-hwapp-dev      # holds secret variable externalApiKey
+        location: westeurope
+        dependsOn: Validate
+      - name: test
+        displayName: Test
+        serviceConnection: sc-hwapp
+        adoEnvironment: hwapp-test
+        variableGroup: vg-hwapp-test
+        location: westeurope
+        dependsOn: Deploy_dev
+      - name: prod
+        displayName: Prod
+        serviceConnection: sc-hwapp
+        adoEnvironment: hwapp-prod       # has an Approvals check -> manual approval
+        variableGroup: vg-hwapp-prod
+        location: westeurope
+        dependsOn: Deploy_test
+
+stages:
+  - template: stages/validate.yml
+    parameters:
+      environments: ${{ parameters.environments }}
+      whatIfEnvironment: dev
+
+  - ${{ if eq(parameters.deploy, true) }}:
+      - ${{ each env in parameters.environments }}:
+          - template: stages/deploy.yml
+            parameters:
+              environment: ${{ env }}
