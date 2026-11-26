@@ -1,0 +1,57 @@
+# One deployment stage per environment (Dev / Test / Prod).
+#   WhatIf job  -> shows what will change (no secret needed)
+#   Deploy job  -> deployment job bound to an Azure DevOps environment
+#                  (approvals/checks on that environment gate this job),
+#                  then runs the PowerShell validation script.
+
+parameters:
+  - name: environment
+    type: object
+
+stages:
+  - stage: Deploy_${{ parameters.environment.name }}
+    displayName: Deploy ${{ parameters.environment.displayName }}
+    dependsOn: ${{ parameters.environment.dependsOn }}
+    # Only deploy from main, and only if everything before it succeeded
+    # (so Prod never runs after a failed Test deployment or validation).
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: WhatIf
+        displayName: What-if
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - template: ../steps/bicep-what-if.yml
+            parameters:
+              serviceConnection: ${{ parameters.environment.serviceConnection }}
+              environmentName: ${{ parameters.environment.name }}
+              location: ${{ parameters.environment.location }}
+
+      - deployment: Deploy
+        displayName: Deploy & validate
+        dependsOn: WhatIf
+        environment: ${{ parameters.environment.adoEnvironment }}
+        pool:
+          vmImage: ubuntu-latest
+        variables:
+          # Secret variable group - linked ONLY to this job.
+          - group: ${{ parameters.environment.variableGroup }}
+          - name: deploymentName
+            value: hwapp-${{ parameters.environment.name }}-$(Build.BuildId)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - template: ../steps/bicep-deploy.yml
+                  parameters:
+                    serviceConnection: ${{ parameters.environment.serviceConnection }}
+                    environmentName: ${{ parameters.environment.name }}
+                    location: ${{ parameters.environment.location }}
+
+                - template: ../steps/validate-deployment.yml
+                  parameters:
+                    serviceConnection: ${{ parameters.environment.serviceConnection }}
+                    environmentName: ${{ parameters.environment.name }}

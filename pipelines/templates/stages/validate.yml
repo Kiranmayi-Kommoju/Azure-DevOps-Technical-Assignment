@@ -1,0 +1,49 @@
+# Validation stage - never deploys anything.
+#   1. bicep build + lint (+ build-params for every environment)
+#   2. PowerShell script analysis
+#   3. what-if against one environment
+
+parameters:
+  - name: environments
+    type: object
+  - name: whatIfEnvironment
+    type: string
+    default: dev
+
+stages:
+  - stage: Validate
+    displayName: Validate
+    jobs:
+      - job: BuildAndLint
+        displayName: Bicep build & lint
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+
+          - template: ../steps/bicep-build-lint.yml
+            parameters:
+              environments: ${{ parameters.environments }}
+
+          - pwsh: |
+              Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -ErrorAction Stop
+              $results = Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Severity Error, Warning
+              $results | Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message
+              $errors = @($results | Where-Object Severity -eq 'Error')
+              if ($errors.Count -gt 0) { throw "PSScriptAnalyzer found $($errors.Count) error(s)." }
+            displayName: PowerShell script analysis
+
+      - ${{ each env in parameters.environments }}:
+          - ${{ if eq(env.name, parameters.whatIfEnvironment) }}:
+              - job: WhatIf
+                displayName: What-if (${{ env.displayName }})
+                dependsOn: BuildAndLint
+                pool:
+                  vmImage: ubuntu-latest
+                steps:
+                  - checkout: self
+                  - template: ../steps/bicep-what-if.yml
+                    parameters:
+                      serviceConnection: ${{ env.serviceConnection }}
+                      environmentName: ${{ env.name }}
+                      location: ${{ env.location }}
