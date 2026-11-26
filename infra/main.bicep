@@ -47,7 +47,6 @@ param keyVaultSoftDeleteRetentionDays int = 90
 param keyVaultPurgeProtection bool = false
 
 @secure()
-@minLength(1)
 @description('Value for the external-api-key secret. Provided at deploy time - never commit it.')
 param externalApiKey string
 
