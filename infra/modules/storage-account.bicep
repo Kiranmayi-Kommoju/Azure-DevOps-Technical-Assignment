@@ -36,10 +36,16 @@ param isHnsEnabled bool = false
 @description('Blob containers to create in this account.')
 param containers string[] = []
 
+@description('Who gets Storage Blob Data Contributor on which container. Shape: { "<container-name>": [ "<principalId>" ] }')
+param containerAccess object = {}
+
 @description('Days to keep deleted blobs/containers recoverable.')
 @minValue(1)
 @maxValue(365)
 param softDeleteRetentionDays int = 7
+
+// Built-in role: Storage Blob Data Contributor (read/write blobs, no key or RBAC management)
+var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 
 module storageAccount 'br/public:avm/res/storage/storage-account:0.33.1' = {
   name: 'avm-${name}'
@@ -52,7 +58,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.33.1' = {
     accessTier: accessTier
     enableHierarchicalNamespace: isHnsEnabled
 
-    // Security defaults
+    // Security defaults for this project
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
     allowBlobPublicAccess: false
@@ -69,13 +75,16 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.33.1' = {
       deleteRetentionPolicyDays: softDeleteRetentionDays
       containerDeleteRetentionPolicyEnabled: true
       containerDeleteRetentionPolicyDays: softDeleteRetentionDays
-     // loop through the containers array and create each container
-      containers: [
-        for containerName in containers: {
-          name: containerName
-          publicAccess: 'None'
-        }
-      ]
+      // Containers are driven by configuration; access is granted per container
+      containers: map(containers, containerName => {
+        name: containerName
+        publicAccess: 'None'
+        roleAssignments: map(containerAccess[?containerName] ?? [], principalId => {
+          principalId: principalId
+          principalType: 'ServicePrincipal'
+          roleDefinitionIdOrName: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+        })
+      })
     }
   }
 }

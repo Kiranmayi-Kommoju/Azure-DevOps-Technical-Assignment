@@ -1,7 +1,7 @@
 // Linux App Service Plan + Web App running the Hello World container.
 // Thin wrapper around the Azure Verified Modules (AVM) for App Service.
-// The app gets a system-assigned managed identity; role assignments are
-// done in separate modules so they can be scoped as tightly as possible.
+// App settings (incl. the Key Vault reference) are applied separately in
+// app-settings.bicep, AFTER the identity has been granted access.
 
 param appServicePlanName string
 param webAppName string
@@ -16,16 +16,6 @@ param instanceCount int = 1
 
 @description('Public Hello World container image.')
 param containerImage string = 'mcr.microsoft.com/azuredocs/aci-helloworld:latest'
-
-@description('Unversioned Key Vault secret URI for the external API key.')
-param externalApiKeySecretUri string
-
-param externalApiBaseUrl string = 'https://api.example.com'
-
-@description('Blob endpoint of the storage account the app is allowed to use.')
-param storageBlobEndpoint string
-
-param storageContainerName string
 
 module appServicePlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   name: 'avm-${appServicePlanName}'
@@ -66,21 +56,6 @@ module webApp 'br/public:avm/res/web/site:0.24.0' = {
       http20Enabled: true
       healthCheckPath: '/'
     }
-
-    configs: [
-      {
-        name: 'appsettings'
-        properties: {
-          WEBSITES_PORT: '80'
-          WEBSITES_ENABLE_APP_SERVICE_STORAGE: 'false'
-          EXTERNAL_API_BASE_URL: externalApiBaseUrl
-          // Key Vault reference - the secret value itself is never stored here
-          EXTERNAL_API_KEY: '@Microsoft.KeyVault(SecretUri=${externalApiKeySecretUri})'
-          STORAGE_BLOB_ENDPOINT: storageBlobEndpoint
-          STORAGE_CONTAINER_NAME: storageContainerName
-        }
-      }
-    ]
 
     // No FTP / SCM basic-auth publishing credentials
     basicPublishingCredentialsPolicies: [
