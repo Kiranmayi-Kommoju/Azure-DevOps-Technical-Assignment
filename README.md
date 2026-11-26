@@ -1,3 +1,99 @@
+# Solution - Hello World infrastructure (Dev -> Test -> Prod)
+
+Bicep (with Azure Verified Modules) + Azure DevOps YAML + PowerShell implementation of the
+assignment below.
+
+- **Design decisions:** [DESIGN.md](DESIGN.md)
+- **Security:** [SECURITY.md](SECURITY.md)
+- **Additional automation:** [AUTOMATION.md](AUTOMATION.md)
+
+## What gets deployed (per environment)
+
+| Resource | Notes |
+| --- | --- |
+| Resource group `rg-hwapp-<env>` | created by the template (subscription scope) |
+| 4 storage accounts (`cold`, `standard`, `hot`, `datalake`) | one loop over `infra/config/storage.json` (AVM) |
+| Blob containers `cold-data`, `standard-data`, `hot-data`, `raw-data` | created per account from the same configuration |
+| Key Vault (RBAC) + secret `external-api-key` | value supplied at deploy time from a secret variable group (AVM) |
+| Linux App Service Plan + Web App | `aci-helloworld` container, system-assigned managed identity (AVM) |
+| Role assignments | Key Vault Secrets User on the secret only; Storage Blob Data Contributor on `standard-data` only |
+
+## Pipeline
+
+```text
+Validate ──► Deploy Dev ──► Deploy Test ──► [approval] ──► Deploy Prod
+(build, lint,  (what-if, deploy,  (what-if, deploy,           (what-if, deploy,
+ what-if)       validate)          validate)                   validate)
+```
+
+- `pipelines/azure-pipelines.yml` - runs on `main`; deploys Dev, Test and Prod.
+- `pipelines/pr-validation.yml` - runs on pull requests; Validate only, never deploys.
+- Both extend `pipelines/templates/pipeline.yml`, where the environment list is defined once.
+
+## One-time Azure DevOps setup
+
+| Item | Name(s) | Notes |
+| --- | --- | --- |
+| Service connection | `sc-hwapp` | Azure Resource Manager, workload identity federation, scope: CoE-RnD subscription. Identity needs **Contributor** + **Role Based Access Control Administrator** (constrained to *Key Vault Secrets User* and *Storage Blob Data Contributor*). |
+| Variable groups | `vg-hwapp-dev`, `vg-hwapp-test`, `vg-hwapp-prod` | Each with variable `externalApiKey` = that environment's API key, **marked secret**. Do not allow access to all pipelines. |
+| Environments | `hwapp-dev`, `hwapp-test`, `hwapp-prod` | On `hwapp-prod` add **Approvals and checks > Approvals** (optionally Branch control = `refs/heads/main`). |
+| Pipelines | from `pipelines/azure-pipelines.yml` and `pipelines/pr-validation.yml` | Repository: this GitHub repo. |
+
+Region, names and SKUs can be changed in `pipelines/templates/pipeline.yml` and
+`infra/parameters/*.bicepparam`.
+
+## Run locally
+
+Requires Azure CLI with Bicep, PowerShell 7 and the Az modules. A real deployment also
+needs permission to create role assignments on the subscription.
+
+```powershell
+az login
+az account set --subscription "<subscription-id>"
+
+# Build + lint (no Azure changes)
+az bicep build --file infra/main.bicep
+az bicep lint  --file infra/main.bicep
+
+# Provide the secret for this session only - nothing is written to disk
+$env:EXTERNAL_API_KEY = Read-Host -Prompt 'API key' -MaskInput
+
+az deployment sub what-if --location westeurope `
+  --template-file infra/main.bicep --parameters infra/parameters/dev.bicepparam
+
+az deployment sub create --location westeurope `
+  --template-file infra/main.bicep --parameters infra/parameters/dev.bicepparam --output none
+
+Remove-Item Env:EXTERNAL_API_KEY
+
+# Validate
+Connect-AzAccount
+./scripts/Test-AzureDeployment.ps1 -SubscriptionId "<subscription-id>" -ResourceGroupName "rg-hwapp-dev" -Environment "dev"
+```
+
+## Assumptions and security considerations (README §1.3)
+
+- The API key is **never** in Git, YAML or parameter files. It lives in a secret variable
+  group per environment, is mapped into the deploy step only, read by
+  `readEnvironmentVariable()` in the `.bicepparam` file and passed to `@secure()`
+  parameters. Details: [SECURITY.md](SECURITY.md#secret-handling).
+- The App Service reads the key through a Key Vault reference using its managed identity;
+  its app settings contain only `@Microsoft.KeyVault(SecretUri=...)`.
+- No storage account keys are used anywhere (shared key access is disabled); access is
+  Entra ID / RBAC only.
+- One subscription (CoE-RnD) and one service connection for all environments; one resource
+  group per environment; region `westeurope`.
+- Storage is Standard_LRS in every environment to keep assignment costs low (Prod would use
+  ZRS/GRS in a real setup).
+- Resources keep public endpoints (no VNet / private endpoints in scope) - see
+  [SECURITY.md](SECURITY.md#network-exposure) for what I would change for production.
+- Prod deploys only after Dev and Test succeeded (including validation) **and** a manual approval.
+- Full list: [DESIGN.md](DESIGN.md#assumptions).
+
+---
+
+# Original assignment
+
 You are joining a DevOps team responsible for deploying Azure infrastructure using Bicep and Azure DevOps YAML pipelines.
 
 Build a small, reusable infrastructure deployment that can be promoted through Dev → Test → Prod environments.
