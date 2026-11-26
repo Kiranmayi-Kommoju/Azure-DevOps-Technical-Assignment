@@ -1,0 +1,45 @@
+# Runs scripts/Test-AzureDeployment.ps1 against the environment that was just
+# deployed. A non-zero exit code fails this step and therefore the stage,
+# which blocks every later stage (Prod cannot run after a failed Test).
+
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: environmentName
+    type: string
+
+steps:
+  - task: AzurePowerShell@5
+    displayName: Validate deployment (${{ parameters.environmentName }})
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      azurePowerShellVersion: LatestVersion
+      pwsh: true
+      ScriptType: InlineScript
+      Inline: |
+        & "$(Build.SourcesDirectory)/scripts/Test-AzureDeployment.ps1" `
+          -SubscriptionId '$(subscriptionId)' `
+          -ResourceGroupName '$(resourceGroupName)' `
+          -Environment '${{ parameters.environmentName }}'
+        if ($LASTEXITCODE -ne 0) {
+          throw "Deployment validation failed (exit code $LASTEXITCODE)."
+        }
+
+  - task: AzurePowerShell@5
+    displayName: Configuration drift report (${{ parameters.environmentName }})
+    # Informational - drift is reported as warnings, it does not block the release.
+    continueOnError: true
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      azurePowerShellVersion: LatestVersion
+      pwsh: true
+      ScriptType: InlineScript
+      Inline: |
+        & "$(Build.SourcesDirectory)/scripts/Get-ConfigurationDrift.ps1" `
+          -SubscriptionId '$(subscriptionId)' `
+          -ResourceGroupName '$(resourceGroupName)' `
+          -Environment '${{ parameters.environmentName }}' `
+          -OutputPath "$(Agent.TempDirectory)/drift-${{ parameters.environmentName }}.md"
+        if ($LASTEXITCODE -ne 0) {
+          throw "Drift report could not run (exit code $LASTEXITCODE)."
+        }

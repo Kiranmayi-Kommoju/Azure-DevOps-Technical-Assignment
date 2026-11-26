@@ -1,0 +1,39 @@
+# Bicep build + lint. No Azure connection needed.
+# AVM modules are downloaded from the public Bicep registry during the build.
+
+parameters:
+  - name: environments
+    type: object
+
+steps:
+  - bash: |
+      set -euo pipefail
+      az bicep install
+      az bicep version
+    displayName: Install Bicep
+
+  - bash: |
+      set -euo pipefail
+      mkdir -p "$(Build.ArtifactStagingDirectory)/arm"
+      az bicep build --file infra/main.bicep --outdir "$(Build.ArtifactStagingDirectory)/arm"
+    displayName: Bicep build
+
+  - bash: |
+      set -euo pipefail
+      # Rules and severities come from infra/bicepconfig.json - any 'error' fails the step.
+      az bicep lint --file infra/main.bicep
+      for module in infra/modules/*.bicep; do
+        az bicep lint --file "$module"
+      done
+    displayName: Bicep lint
+
+  - ${{ each env in parameters.environments }}:
+      - bash: |
+          set -euo pipefail
+          # Only checks that the parameter file compiles against main.bicep.
+          # Uses a dummy value - real secrets are never needed for validation.
+          az bicep build-params --file "infra/parameters/${{ env.name }}.bicepparam" --outfile "$(Agent.TempDirectory)/${{ env.name }}.parameters.json"
+          rm -f "$(Agent.TempDirectory)/${{ env.name }}.parameters.json"
+        displayName: Build params (${{ env.displayName }})
+        env:
+          EXTERNAL_API_KEY: placeholder-not-a-secret

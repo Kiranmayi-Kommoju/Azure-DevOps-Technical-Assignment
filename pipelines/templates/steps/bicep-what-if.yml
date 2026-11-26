@@ -1,0 +1,30 @@
+# Subscription-scope what-if. Read-only - nothing is deployed.
+# A placeholder is used for the secure parameter: what-if never shows secure
+# values anyway, and this way the real API key is not needed outside the
+# deployment job.
+
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: environmentName
+    type: string
+  - name: location
+    type: string
+
+steps:
+  - task: AzureCLI@2
+    displayName: What-if (${{ parameters.environmentName }})
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        az deployment sub what-if \
+          --name "whatif-${{ parameters.environmentName }}-$(Build.BuildId)" \
+          --location "${{ parameters.location }}" \
+          --template-file infra/main.bicep \
+          --parameters "infra/parameters/${{ parameters.environmentName }}.bicepparam" \
+          --only-show-errors
+    env:
+      EXTERNAL_API_KEY: placeholder-not-a-secret
