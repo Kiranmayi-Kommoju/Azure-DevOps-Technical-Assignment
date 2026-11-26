@@ -1,0 +1,42 @@
+{
+  "$comment": "Single source of truth for storage. Read by Bicep (loadJsonContent) and by the PowerShell validation/drift scripts. Add an entry to storageAccounts to deploy another account - no new resource block needed.",
+  "skuByEnvironment": {
+    "dev": "Standard_LRS",
+    "test": "Standard_LRS",
+    "prod": "Standard_LRS"
+  },
+  "storageAccounts": [
+    {
+      "name": "cold",
+      "kind": "StorageV2",
+      "accessTier": "Cool",
+      "isHnsEnabled": false,
+      "containers": [ "cold-data" ]
+    },
+    {
+      "name": "standard",
+      "kind": "StorageV2",
+      "accessTier": "Hot",
+      "isHnsEnabled": false,
+      "containers": [ "standard-data" ]
+    },
+    {
+      "name": "hot",
+      "kind": "StorageV2",
+      "accessTier": "Hot",
+      "isHnsEnabled": false,
+      "containers": [ "hot-data" ]
+    },
+    {
+      "name": "datalake",
+      "kind": "StorageV2",
+      "accessTier": "Hot",
+      "isHnsEnabled": true,
+      "containers": [ "raw-data" ]
+    }
+  ],
+  "appStorageAccess": {
+    "storageAccount": "standard",
+    "container": "standard-data"
+  }
+}
