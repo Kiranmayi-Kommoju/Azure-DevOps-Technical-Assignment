@@ -96,6 +96,30 @@ Configuration drift report - dev (rg-hwapp-dev)
 ============================================================
 No drift detected. Deployed state matches the configuration.
 ```
+## Pre-deployment check: what-if
+
+`scripts/Invoke-DeploymentWhatIf.ps1` runs an Azure what-if for one environment and shows
+what is going to be deployed - nothing is deployed.
+
+- Checks Azure CLI, sign-in and subscription before running.
+- Uses a placeholder for the API key (what-if never shows secure values), so the real key
+  is not needed; the placeholder is removed afterwards.
+- Shows every resource that will be deployed with its key settings (SKU, tier,
+  hierarchical namespace, soft delete, public access, location), including the modules
+  what-if cannot preview because they depend on the App Service identity.
+- `-FailOnDelete` returns exit code 1 if anything would be deleted - useful before a Prod release.
+
+```powershell
+az login
+./scripts/Invoke-DeploymentWhatIf.ps1 -Environment dev -SubscriptionId "<subscription-id>"
+./scripts/Invoke-DeploymentWhatIf.ps1 -Environment prod -SubscriptionId "<subscription-id>" -FailOnDelete
+```
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | What-if completed |
+| 1 | What-if reported an error, or deletes were found with `-FailOnDelete` |
+| 2 | Could not run - Azure CLI missing, not signed in, invalid subscription, missing files |
 
 ## Validation script - quick reference
 
